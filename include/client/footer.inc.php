@@ -22,5 +22,66 @@ if (($lang = Internationalization::getCurrentLanguage()) && $lang != 'en_US') { 
         print $api->client(false);
     ?>);
 </script>
+
+<!-- Chat Widget Start -->
+
+<!-- Live help embed code - Widget -->
+<script type="text/javascript">
+var LHCChatOptions = {};
+LHCChatOptions.opt = {widget_height:140,widget_width:300,popup_height:520,popup_width:500};
+(function() {
+var po = document.createElement('script'); po.type = 'text/javascript'; po.async = true;
+var referrer = (document.referrer) ? encodeURIComponent(document.referrer.substr(document.referrer.indexOf('://')+1)) : '';
+var location  = (document.location) ? encodeURIComponent(window.location.href.substring(window.location.protocol.length)) : '';
+po.src = '//chat.segwaydiscovery.com/index.php/chat/getstatus/(click)/internal/(position)/bottom_right/(ma)/br/(top)/350/(units)/pixels/(leaveamessage)/true?r='+referrer+'&l='+location;
+var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(po, s);
+})();
+</script>
+
+
+<!-- FAQ embed code - Widget -->
+<script type="text/javascript">
+var LHCFAQOptions = {status_text:'FAQ',url:'replace_me_with_dynamic_url',identifier:''};
+(function() {
+var po = document.createElement('script'); po.type = 'text/javascript'; po.async = true;
+po.src = '//chat.segwaydiscovery.com/index.php/faq/getstatus/(position)/middle_right/(top)/450/(units)/pixels';
+var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(po, s);
+})();
+</script>
+
+<!-- Questionary embed code - Widget -->
+<script type="text/javascript">
+var LHCVotingOptions = {status_text:'Help us to grow'};
+(function() {
+var po = document.createElement('script'); po.type = 'text/javascript'; po.async = true;
+po.src = '//chat.segwaydiscovery.com/index.php/questionary/getstatus/(position)/middle_right/(top)/400/(units)/pixels/(width)/300/(height)/300';
+var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(po, s);
+})();
+</script>
+
+<!-- Chatbox embed code - Widget -->
+<script type="text/javascript">
+var LHCChatboxOptions = {hashchatbox:'empty',identifier:'default',status_text:'Chatbox'};
+(function() {
+var po = document.createElement('script'); po.type = 'text/javascript'; po.async = true;
+po.src = '//chat.segwaydiscovery.com/index.php/chatbox/getstatus/(position)/middle_right/(top)/300/(units)/pixels/(width)/300/(height)/300/(chat_height)/220';
+var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(po, s);
+})();
+</script>
+
+<!-- Browse offers embed code - Embed code -->
+<script type="text/javascript">
+var LHCBROWSEOFFEROptions = {};
+(function() {
+var po = document.createElement('script'); po.type = 'text/javascript'; po.async = true;
+var referrer = (document.referrer) ? encodeURIComponent(document.referrer.substr(document.referrer.indexOf('://')+1)) : '';
+var location  = (document.location) ? encodeURIComponent(window.location.href.substring(window.location.protocol.length)) : '';
+po.src = '//chat.segwaydiscovery.com/index.php/browseoffer/getstatus/(size)/450/(height)/450/(units)/pixels/(showoverlay)/true?r='+referrer+'&l='+location;
+var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(po, s);
+})();
+</script>
+
+<!-- Chat Widget Stop -->
+
 </body>
 </html>
