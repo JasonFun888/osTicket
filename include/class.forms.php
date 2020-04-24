@@ -1332,7 +1332,6 @@ class FormField {
     }
 
     function getEditForm($source=null) {
-
         $fields = array(
                 'field' => $this,
                 'comments' => new TextareaField(array(
@@ -1447,6 +1446,9 @@ class TextboxField extends FormField {
         $config = $this->getConfiguration();
         $validators = array(
             '' => '',
+            'noop' => array(
+                function($a, &$b) { return true; }
+            ),
             'formula' => array(array('Validator', 'is_formula'),
                 __('Content cannot start with the following characters: = - + @')),
             'email' =>  array(array('Validator', 'is_valid_email'),
@@ -1455,7 +1457,10 @@ class TextboxField extends FormField {
                 __('Enter a valid phone number')),
             'ip' =>     array(array('Validator', 'is_ip'),
                 __('Enter a valid IP address')),
-            'number' => array('is_numeric', __('Enter a number')),
+            'number' => array(array('Validator', 'is_numeric'),
+                __('Enter a number')),
+            'password' => array(array('Validator', 'check_passwd'),
+                __('Invalid Password')),
             'regex' => array(
                 function($v) use ($config) {
                     $regex = $config['regex'];
@@ -1476,15 +1481,19 @@ class TextboxField extends FormField {
             $valid = 'formula';
         $func = $validators[$valid];
         $error = $func[1];
+        $err = null;
+        // If validator is number and the value is &#48 set to 0 (int) for is_numeric
+        if ($valid == 'number' && $value == '&#48')
+            $value = 0;
         if ($config['validator-error'])
             $error = $this->getLocal('validator-error', $config['validator-error']);
         if (is_array($func) && is_callable($func[0]))
-            if (!call_user_func($func[0], $value))
-                $this->_errors[] = $error;
+            if (!call_user_func_array($func[0], array($value, &$err)))
+                $this->_errors[] = $err ?: $error;
     }
 
     function parse($value) {
-        return Format::striptags($value);
+        return Format::strip_emoticons(Format::striptags($value));
     }
 
     function display($value) {
@@ -1494,6 +1503,11 @@ class TextboxField extends FormField {
 
 class PasswordField extends TextboxField {
     static $widget = 'PasswordWidget';
+
+    function __construct($options=array()) {
+        parent::__construct($options);
+        $this->set('validator', 'password');
+    }
 
     function parse($value) {
         // Don't trim the value
@@ -1815,7 +1829,7 @@ class ChoiceField extends FormField {
         if (is_string($value) && strpos($value, ',')) {
             $values = array();
             $choices = $this->getChoices();
-            $vals = explode(',', $value);
+            $vals = array_map('trim', explode(',', $value));
             foreach ($vals as $V) {
                 if (isset($choices[$V]))
                     $values[$V] = $choices[$V];
@@ -2064,6 +2078,28 @@ class NumericField extends FormField {
                         ),
             )),
         );
+    }
+
+    function getSearchQ($method, $value, $name=false) {
+        switch ($method) {
+        case 'equal':
+            return new Q(array(
+                "{$name}__exact" => intval($value)
+            ));
+        break;
+        case 'greater':
+            return Q::any(array(
+                "{$name}__gt" => intval($value)
+            ));
+        break;
+        case 'less':
+            return Q::any(array(
+                "{$name}__lt" => intval($value)
+            ));
+        break;
+        default:
+            return parent::getSearchQ($method, $value, $name);
+        }
     }
 }
 
@@ -2415,15 +2451,18 @@ class DatetimeField extends FormField {
         case 'before':
             return new Q(array("{$name}__lt" => $value));
         case 'between':
-            foreach (array('left', 'right') as $side) {
-                $value[$side] = is_int($value[$side])
-                    ? DateTime::createFromFormat('U', !$config['gmt']
-                        ? Misc::gmtime($value[$side]) : $value[$side]) ?: $value[$side]
-                    : $value[$side];
-            }
+            $left = Format::parseDateTime($value['left']);
+            $right = Format::parseDateTime($value['right']);
+            // TODO: allow time selection for between
+            $left = $left->setTime(00, 00, 00);
+            $right = $right->setTime(23, 59, 59);
+            // Convert time to db timezone
+            $dbtz = new DateTimeZone($cfg->getDbTimezone());
+            $left->setTimezone($dbtz);
+            $right->setTimezone($dbtz);
             return new Q(array(
-                "{$name}__gte" => $value['left'],
-                "{$name}__lte" => $value['right'],
+                "{$name}__gte" =>  $left->format('Y-m-d H:i:s'),
+                "{$name}__lte" =>  $right->format('Y-m-d H:i:s'),
             ));
         case 'ndaysago':
             $int = $intervals[$value['int'] ?: 'd'] ?: 'DAY';
@@ -2669,7 +2708,7 @@ class ThreadEntryField extends FormField {
 
     function getWidget($widgetClass=false) {
         if ($hint = $this->getLocal('hint'))
-            $this->set('placeholder', $hint);
+            $this->set('placeholder', Format::striptags($hint));
         $this->set('hint', null);
         $widget = parent::getWidget($widgetClass);
         return $widget;
@@ -3472,9 +3511,11 @@ class FileUploadField extends FormField {
         if (!$this->isValidFileType($file['name'], $file['type']))
             throw new FileUploadError(__('File type is not allowed'));
 
-        if (is_callable($file['data']))
-            $file['data'] = $file['data']();
-        if (!isset($file['size'])) {
+        if (!isset($file['data']) && isset($file['data_cbk'])
+                && is_callable($file['data_cbk']))
+            $file['data'] = $file['data_cbk']();
+
+        if (!isset($file['size']) && isset($file['data'])) {
             // bootstrap.php include a compat version of mb_strlen
             if (extension_loaded('mbstring'))
                 $file['size'] = mb_strlen($file['data'], '8bit');
@@ -3665,8 +3706,8 @@ class FileUploadField extends FormField {
         $A = (array) $after;
         $added = array_diff($A, $B);
         $deleted = array_diff($B, $A);
-        $added = Format::htmlchars(array_keys($added));
-        $deleted = Format::htmlchars(array_keys($deleted));
+        $added = Format::htmlchars(array_values($added));
+        $deleted = Format::htmlchars(array_values($deleted));
 
         if ($added && $deleted) {
             $desc = sprintf(
@@ -4004,7 +4045,7 @@ class TextareaWidget extends Widget {
         <span style="display:inline-block;width:100%">
         <textarea <?php echo $rows." ".$cols." ".$maxlength." ".$class
                 .' '.Format::array_implode('=', ' ', $attrs)
-                .' placeholder="'.$config['placeholder'].'"'; ?>
+                .' placeholder="'.$this->field->getLocal('placeholder', $config['placeholder']).'"'; ?>
             id="<?php echo $this->id; ?>"
             name="<?php echo $this->name; ?>"><?php
                 echo Format::htmlchars($this->value);
@@ -4415,9 +4456,13 @@ class DatetimePickerWidget extends Widget {
 
         $config = $this->field->getConfiguration();
         $timezone = $this->field->getTimezone();
-
+        $dateFormat = $cfg->getDateFormat(true);
+        $timeFormat = $cfg->getTimeFormat(true);
         if (!isset($this->value) && ($default=$this->field->get('default')))
             $this->value = $default;
+
+        if ($this->value == 0)
+            $this->value = '';
 
         if ($this->value) {
 
@@ -4432,14 +4477,14 @@ class DatetimePickerWidget extends Widget {
                 // Convert to user's timezone for update.
                 $datetime->setTimezone($timezone);
 
-            // Get the date
+            // Get formatted date
             $this->value = Format::date($datetime->getTimestamp(), false,
                         false, $timezone ? $timezone->getName() : 'UTC');
-
-            // TODO: Fix timeformat based on config. For now we're forcing
-            // hh:mm tt
+            // Get formatted time
             if ($config['time']) {
-                 $this->value .=$datetime->format(' h:i a');
+                 $this->value .=' '.Format::time($datetime->getTimestamp(),
+                         false, $timeFormat, $timezone ?
+                         $timezone->getName() : 'UTC');
             }
 
         } else {
@@ -4482,14 +4527,15 @@ class DatetimePickerWidget extends Widget {
                                 controlType: 'select',\n
                                 timeInput: true,\n
                                 timeFormat: \"%s\",\n",
-                                "hh:mm tt");
+                                Format::dtfmt_php2js($timeFormat));
                     }
                     ?>
                     numberOfMonths: 2,
                     showButtonPanel: true,
                     buttonImage: './images/cal.png',
                     showOn:'both',
-                    dateFormat: $.translate_format('<?php echo $cfg->getDateFormat(true); ?>')
+                    dateFormat: '<?php echo
+                        Format::dtfmt_php2js($dateFormat); ?>'
                 });
             });
         </script>
@@ -4804,7 +4850,7 @@ class FreeTextWidget extends Widget {
         }
         if ($hint = $this->field->getLocal('hint')) { ?>
         <em><?php
-            echo Format::htmlchars($hint);
+            echo Format::display($hint);
         ?></em><?php
         } ?>
         <div><?php

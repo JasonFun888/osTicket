@@ -182,13 +182,19 @@ class Validator {
         return true;
     }
 
-    static function is_valid_email($email) {
+    static function is_numeric($number, &$error='') {
+        if (!is_numeric($number))
+            $error = __('Enter a Number');
+        return $error == '';
+    }
+
+    static function is_valid_email($email, &$error='') {
         global $cfg;
         // Default to FALSE for installation
         return self::is_email($email, false, $cfg && $cfg->verifyEmailAddrs());
     }
 
-    static function is_phone($phone) {
+    static function is_phone($phone, &$error='') {
         /* We're not really validating the phone number but just making sure it doesn't contain illegal chars and of acceptable len */
         $stripped=preg_replace("(\(|\)|\-|\.|\+|[  ]+)","",$phone);
         return (!is_numeric($stripped) || ((strlen($stripped)<7) || (strlen($stripped)>16)))?false:true;
@@ -199,7 +205,7 @@ class Validator {
         return ($url && ($info=parse_url($url)) && $info['host']);
     }
 
-    static function is_ip($ip) {
+    static function is_ip($ip, &$error='') {
         return filter_var(trim($ip), FILTER_VALIDATE_IP) !== false;
     }
 
@@ -214,6 +220,15 @@ class Validator {
     static function is_formula($text, &$error='') {
         if (!preg_match('/^[^=\+@-].*$/s', $text))
             $error = __('Content cannot start with the following characters: = - + @');
+        return $error == '';
+    }
+
+    static function check_passwd($passwd, &$error='') {
+        try {
+            PasswordPolicy::checkPassword($passwd, null);
+        } catch (BadPassword $ex) {
+            $error = $ex->getMessage();
+        }
         return $error == '';
     }
 

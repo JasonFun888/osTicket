@@ -43,6 +43,11 @@ class Format {
     }
 
     function mimedecode($text, $encoding='UTF-8') {
+        // Handle poorly or completely un-encoded header values (
+        if (function_exists('mb_detect_encoding'))
+            if (($src_enc = mb_detect_encoding($text))
+                    && (strcasecmp($src_enc, 'ASCII') !== 0))
+                return Charset::transcode($text, $src_enc, $encoding);
 
         if(function_exists('imap_mime_header_decode')
                 && ($parts = imap_mime_header_decode($text))) {
@@ -447,6 +452,7 @@ class Format {
                 '/[\x{23F0}-\x{23FF}]/u',   # Clock/Buttons
                 '/[\x{23E0}-\x{23EF}]/u',   # More Buttons
                 '/[\x{2310}-\x{231F}]/u',   # Hourglass/Watch
+                '/[\x{1000B6}]/u',          # Private Use Area (Plane 16)
                 '/[\x{2322}-\x{232F}]/u'    # Keyboard
             ), '', $text);
     }
@@ -460,7 +466,7 @@ class Format {
             function($match) {
                 // Scan for things that look like URLs
                 return preg_replace_callback(
-                    '`(?<!>)(((f|ht)tp(s?)://|(?<!//)www\.)([-+~%/.\w]+)(?:[-?#+=&;%@.\w]*)?)'
+                    '`(?<!>)(((f|ht)tp(s?)://|(?<!//)www\.)([-+~%/.\w]+)(?:[-?#+=&;%@.\w\[\]\/]*)?)'
                    .'|(\b[_\.0-9a-z-]+@([0-9a-z][0-9a-z-]+\.)+[a-z]{2,63})`',
                     function ($match) {
                         if ($match[1]) {
@@ -612,11 +618,6 @@ class Format {
         $timezone = $datetime->getTimeZone();
         // Use IntlDateFormatter if available
         if (class_exists('IntlDateFormatter')) {
-
-            if ($cfg && $cfg->isForce24HourTime())
-                $format = str_replace(array('a', 'h'), array('', 'H'),
-                        $format);
-
             $options += array(
                     'pattern' => $format,
                     'timezone' => $timezone->getName());
@@ -633,6 +634,9 @@ class Format {
         // Change format to strftime format otherwise us a fallback format
         $format = self::getStrftimeFormat($format) ?: $options['strftime']
             ?:  '%x %X';
+        if ($cfg && $cfg->isForce24HourTime())
+            $format = str_replace('X', 'R', $format);
+
         return strftime($format, $timestamp);
     }
 
@@ -794,6 +798,36 @@ class Format {
             },
             $format
         );
+    }
+
+    // Translate php date / time formats to js equivalent
+    function dtfmt_php2js($format) {
+
+        $codes = array(
+        // Date
+        'DD' => 'oo',
+        'D' => 'o',
+        'EEEE' => 'DD',
+        'EEE' => 'D',
+        'MMMM' => '||',
+        'MMM' => '|',
+        'MM' => 'mm',
+        'M' =>  'm',
+        '||' => 'MM',
+        '|' => 'M',
+        'yyyy' => 'YY',
+        'yyy' => 'YY',
+        'yy' =>  'Y',
+        'y' => 'yy',
+        'YY' =>  'yy',
+        'Y' => 'y',
+        // Time
+        'a' => 'tt',
+        'HH' => 'H',
+        'H' => 'HH',
+        );
+
+        return str_replace(array_keys($codes), array_values($codes), $format);
     }
 
     // Thanks, http://stackoverflow.com/a/2955878/1025836
